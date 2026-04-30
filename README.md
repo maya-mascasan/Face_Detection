@@ -38,6 +38,6 @@ Finally, a tight bounding box is drawn around the detected face.
 ## 📸 Example Results
 
 Here is the algorithm successfully detecting a face while ignoring the neck:
-![Detection Result](Images/result1.jpg)
-![Detection Result](Images/result2.jpg)
-![Detection Result](Images/result3.jpg)
+<img src="Images/result1.jpg" width="400">
+<img src="Images/result2.jpg" width="400">
+<img src="Images/result3.jpg" width="400">
