@@ -129,6 +129,124 @@ Mat erosion(Mat src) {
 	return dst;
 }
 
+void FindFaceAndDrawBox(Mat src, Mat skin) {
+	int height = skin.rows;
+	int width = skin.cols;
+
+	int di[8] = { 0, -1, -1, -1, 0, 1, 1, 1 };
+	int dj[8] = { 1, 1, 0, -1, -1, -1, 0, 1 };
+
+	int label = 0;
+	Mat labels(height, width, CV_32SC1, Scalar(0));
+
+	std::vector<Data> shapes;
+	shapes.push_back({ 0, 0, 0, 0, 0, 0 });
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			if (skin.at<uchar>(i, j) == 255 && labels.at<int>(i, j) == 0) {
+				label++;
+
+				Data currentShape = { 0, i, i, j, j, 0 };
+
+				std::queue<Point> q;
+				q.push(Point(j, i));
+				labels.at<int>(i, j) = label;
+
+				while (!q.empty()) {
+					Point p = q.front();
+					q.pop();
+
+					currentShape.area++;
+					if (p.y < currentShape.min_r) currentShape.min_r = p.y;
+					if (p.y > currentShape.max_r) currentShape.max_r = p.y;
+					if (p.x < currentShape.min_c) currentShape.min_c = p.x;
+					if (p.x > currentShape.max_c) currentShape.max_c = p.x;
+
+					bool isEdgePixel = false;
+
+					for (int k = 0; k < 8; k++) {
+						int ni = p.y + di[k];
+						int nj = p.x + dj[k];
+
+						if (ni < 0 || ni >= height || nj < 0 || nj >= width) {
+							isEdgePixel = true;
+							continue;
+						}
+						if (skin.at<uchar>(ni, nj) == 0) {
+							isEdgePixel = true;
+						}
+						if (skin.at<uchar>(ni, nj) == 255 && labels.at<int>(ni, nj) == 0) {
+							labels.at<int>(ni, nj) = label;
+							q.push(Point(nj, ni));
+						}
+					}
+					if (isEdgePixel) {
+						currentShape.perimeter++;
+					}
+				}
+				shapes.push_back(currentShape);
+			}
+		}
+	}
+
+	int goodFace = -1;
+	int highestY = height;
+
+	for (int i = 1; i <= label; i++) {
+		if (shapes[i].area > 5000) {
+
+			int boxWidth = shapes[i].max_c - shapes[i].min_c;
+			int boxHeight = shapes[i].max_r - shapes[i].min_r;
+			if (boxWidth == 0 || boxHeight == 0) continue;
+
+			float aspectRatio = (float)boxWidth / (float)boxHeight;
+
+			int boundingBoxArea = boxWidth * boxHeight;
+			float fillRatio = (float)shapes[i].area / (float)boundingBoxArea;
+
+			bool isFaceProportions = (aspectRatio > 0.4f && aspectRatio < 1.5f);
+
+			bool isOvalShape = (fillRatio > 0.45f && fillRatio < 0.85f);
+
+			if (isFaceProportions && isOvalShape) {
+				if (shapes[i].min_r < highestY) {
+					highestY = shapes[i].min_r;
+					goodFace = i;
+				}
+			}
+
+
+		}
+	}
+
+	Mat res = src.clone();
+
+	if (goodFace != -1) {
+		Data face = shapes[goodFace];
+
+		int boxWidth = face.max_c - face.min_c;
+		int boxHeight = face.max_r - face.min_r;
+
+		int final_min_r = face.min_r;
+		int final_max_r = face.max_r;
+		int final_min_c = face.min_c;
+		int final_max_c = face.max_c;
+
+		if (final_min_r < 0) final_min_r = 0;
+		if (final_max_r >= height) final_max_r = height - 1;
+		if (final_min_c < 0) final_min_c = 0;
+		if (final_max_c >= width) final_max_c = width - 1;
+
+		rectangle(res, Point(final_min_c, final_min_r), Point(final_max_c, final_max_r), Scalar(0, 0, 255), 3);
+	}
+	else {
+		std::cout << "No face detected in this image.\n";
+	}
+
+	imshow("Face Detection Result", res);
+}
+
 
 void detectSkin(bool ok) {
 	char fname[MAX_PATH];
@@ -182,123 +300,7 @@ void detectSkin(bool ok) {
 
 	}
 }
-void FindFaceAndDrawBox(Mat src, Mat skin) {
-	int height = skin.rows;
-	int width = skin.cols;
 
-	int di[8] = { 0, -1, -1, -1, 0, 1, 1, 1 };
-	int dj[8] = { 1, 1, 0, -1, -1, -1, 0, 1 };
-
-	int label = 0;
-	Mat labels(height, width, CV_32SC1, Scalar(0));
-
-	std::vector<Data> shapes;
-	shapes.push_back({ 0, 0, 0, 0, 0, 0 });
-
-	for (int i = 0; i < height; i++) {
-		for (int j = 0; j < width; j++) {
-			if (skin.at<uchar>(i, j) == 255 && labels.at<int>(i, j) == 0) {
-				label++;
-
-				Data currentShape = { 0, i, i, j, j, 0 };
-
-				std::queue<Point> q;
-				q.push(Point(j, i));
-				labels.at<int>(i, j) = label;
-
-				while (!q.empty()) {
-					Point p = q.front();
-					q.pop();
-
-					currentShape.area++;
-					if (p.y < currentShape.min_r) currentShape.min_r = p.y;
-					if (p.y > currentShape.max_r) currentShape.max_r = p.y;
-					if (p.x < currentShape.min_c) currentShape.min_c = p.x;
-					if (p.x > currentShape.max_c) currentShape.max_c = p.x;
-
-					bool isEdgePixel = false; 
-
-					for (int k = 0; k < 8; k++) {
-						int ni = p.y + di[k];
-						int nj = p.x + dj[k];
-
-						if (ni < 0 || ni >= height || nj < 0 || nj >= width) {
-							isEdgePixel = true;
-							continue;
-						}
-						if (skin.at<uchar>(ni, nj) == 0) {
-							isEdgePixel = true;
-						}
-						if (skin.at<uchar>(ni, nj) == 255 && labels.at<int>(ni, nj) == 0) {
-							labels.at<int>(ni, nj) = label;
-							q.push(Point(nj, ni));
-						}
-					}
-					if (isEdgePixel) {
-						currentShape.perimeter++;
-					}
-				}
-				shapes.push_back(currentShape); 
-			}
-		}
-	}
-
-	int goodFace = -1;
-	int highestY = height; 
-
-	for (int i = 1; i <= label; i++) {
-		if (shapes[i].area > 5000) {
-
-			int boxWidth = shapes[i].max_c - shapes[i].min_c;
-			int boxHeight = shapes[i].max_r - shapes[i].min_r;
-			if (boxWidth == 0 || boxHeight == 0) continue;
-
-			float aspectRatio = (float)boxWidth / (float)boxHeight;
-
-			int boundingBoxArea = boxWidth * boxHeight;
-			float fillRatio = (float)shapes[i].area / (float)boundingBoxArea;
-
-			bool isFaceProportions = (aspectRatio > 0.4f && aspectRatio < 1.5f);
-
-			bool isOvalShape = (fillRatio > 0.45f && fillRatio < 0.85f);
-
-			if (isFaceProportions && isOvalShape) {
-				if (shapes[i].min_r < highestY) {
-					highestY = shapes[i].min_r;
-					goodFace = i;
-				}
-			}
-
-
-		}
-	}
-
-	Mat res = src.clone();
-
-	if (goodFace != -1) {
-		Data face = shapes[goodFace];
-
-		int boxWidth = face.max_c - face.min_c;
-		int boxHeight = face.max_r - face.min_r;
-
-		int final_min_r = face.min_r;
-		int final_max_r = face.max_r;
-		int final_min_c = face.min_c;
-		int final_max_c = face.max_c;
-
-		if (final_min_r < 0) final_min_r = 0;
-		if (final_max_r >= height) final_max_r = height - 1;
-		if (final_min_c < 0) final_min_c = 0;
-		if (final_max_c >= width) final_max_c = width - 1;
-
-		rectangle(res, Point(final_min_c, final_min_r), Point(final_max_c, final_max_r), Scalar(0, 0, 255), 3); 
-	}
-	else {
-		std::cout << "No face detected in this image.\n";
-	}
-
-	imshow("Face Detection Result", res);
-}
 
 int main()
 {
